@@ -1,0 +1,260 @@
+﻿using Employee_management.Api.Data;
+using Employee_management.Interfaces.Interfaces;
+using Employee_management.Shared.Dto;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace Employee_management.Api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class EmployeeController : ControllerBase
+    {
+        private readonly IEmployeeService _employeeService;
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<EmployeeController> _logger;
+
+        public EmployeeController(
+            IEmployeeService employeeService,
+            ApplicationDbContext context,
+            ILogger<EmployeeController> logger)
+        {
+            _employeeService = employeeService;
+            _context = context;
+            _logger = logger;
+        }
+
+        // GET: api/Employee
+        [HttpGet]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<IActionResult> GetAll([FromQuery] PaginationRequestDto request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var user = HttpContext.User;
+                var isAdmin = user.IsInRole("Admin");
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var result = await _employeeService.GetEmployeesPaginatedAsync(request, userId, isAdmin);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching paginated employee list");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+
+        [HttpGet("role/{roleName}")]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<ActionResult<IEnumerable<object>>> GetByRole(string roleName)
+        {
+            try
+            {
+                var employees = await _employeeService.GetEmployeesByRoleAsync(roleName);
+
+                var result = employees.Select(e => new
+                {
+                    id = e.Id,
+                    userId = e.UserId,
+                    fullName = $"{e.FirstName} {e.LastName}".Trim(),
+                    email = e.Email,
+                    phoneNumber = e.PhoneNumber,
+                    departmentName = e.DepartmentName,
+                    departmentId = e.DepartmentId,
+                    isActive = e.IsActive
+                });
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching employees by role");
+                return StatusCode(500, "An error occurred while fetching employees by role");
+            }
+        }
+
+        [HttpGet("managerpaged")]
+        public async Task<IActionResult> GetManagersPaged([FromQuery] PaginationRequestDto request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var pagedManagers = await _employeeService.GetManagersPaginatedAsync(request);
+            return Ok(pagedManagers);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<IActionResult> CreateEmployee([FromBody] EmployeeDto dto)
+        {
+            var result = await _employeeService.CreateAsync(dto);
+            if (result)
+                return Ok(new { Message = "Employee created successfully." });
+
+            return BadRequest("Could not create employee.");
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<IActionResult> UpdateEmployee(int id, [FromBody] EmployeeDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors)
+                                               .Select(e => e.ErrorMessage)
+                                               .ToList();
+                return BadRequest(new
+                {
+                    type = "Validation Error",
+                    title = "Model validation failed",
+                    status = 400,
+                    errors = errors
+                });
+            }
+
+            if (id != dto.Id)
+            {
+                return BadRequest(new
+                {
+                    type = "ID Mismatch",
+                    title = "Validation Error",
+                    status = 400,
+                    message = "Route ID does not match employee ID"
+                });
+            }
+
+            var result = await _employeeService.UpdateAsync(dto);
+            if (result)
+                return Ok(new { Message = "Employee updated successfully." });
+
+            return NotFound(new
+            {
+                type = "Not Found",
+                title = "Employee Not Found",
+                status = 404,
+                message = $"Employee with ID {id} not found"
+            });
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteEmployee(int id)
+        {
+            try
+            {
+                var result = await _employeeService.DeleteAsync(id);
+                if (result)
+                    return Ok(new { Message = "Employee deleted successfully." });
+
+                return NotFound("Employee not found");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("manager")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateManager([FromBody] CreateManagerDto dto)
+        {
+            try
+            {
+                var (success, errorMessage) = await _employeeService.CreateManagerAsync(dto);
+                if (!success)
+                    return BadRequest(new { Message = errorMessage });
+
+                return Ok(new { Message = "Manager created successfully." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating manager");
+                return StatusCode(500, new { Message = "Internal Server Error", Error = ex.Message });
+            }
+        }
+
+        [HttpGet("manager/{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<CreateManagerDto>> GetManager(int id)
+        {
+            var manager = await _employeeService.GetManagerByIdAsync(id);
+            if (manager == null)
+                return NotFound();
+
+            return Ok(manager);
+        }
+
+        [HttpPut("manager/{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateManager(int id, [FromBody] UpdateManagerDto dto)
+        {
+            var result = await _employeeService.UpdateManagerAsync(id, dto);
+            if (!result)
+                return NotFound();
+
+            return Ok(new { Message = "Manager updated successfully" });
+        }
+
+        [HttpDelete("manager/{userId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteManager(string userId)
+        {
+            var managerEmployee = await _context.Employees
+                .Include(e => e.User)
+                .FirstOrDefaultAsync(e => e.UserId == userId);
+
+            if (managerEmployee == null)
+                return NotFound("Manager not found");
+
+            var managesEmployees = await _context.Employees.AnyAsync(e => e.ManagerId == userId);
+            if (managesEmployees)
+                return BadRequest("Cannot delete manager: they are assigned as manager to other employees.");
+
+            var hasAssignedTasks = await _context.Tasks.AnyAsync(t => t.AssignedToId == userId);
+            if (hasAssignedTasks)
+                return BadRequest("Cannot delete manager: they are assigned to tasks.");
+
+            if (managerEmployee.User != null)
+                _context.Users.Remove(managerEmployee.User);
+
+            _context.Employees.Remove(managerEmployee);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Manager deleted successfully" });
+        }
+
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<ActionResult<EmployeeDto>> GetEmployee(int id)
+        {
+            var employee = await _employeeService.GetByIdAsync(id);
+            if (employee == null)
+                return NotFound();
+
+            return Ok(employee);
+        }
+
+        [HttpGet("active-departments")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetActiveDepartments()
+        {
+            var departments = await _employeeService.GetActiveDepartmentsAsync();
+            return Ok(departments);
+        }
+    }
+}

@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Employee_management.EntityFrameworkCore\Employee_management.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\Employee_management.Interfaces\Employee_management.Interfaces.csproj" />
+  </ItemGroup>
+
+</Project>
