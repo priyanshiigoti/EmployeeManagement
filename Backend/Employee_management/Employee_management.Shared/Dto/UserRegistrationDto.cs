@@ -14,7 +14,10 @@ namespace Employee_management.Shared.Dto
 
         [Required(ErrorMessage = "Email is required")]
         [EmailAddress(ErrorMessage = "Invalid email address")]
+        [RegularExpression(@"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+     ErrorMessage = "Enter a valid email address.")]
         public string Email { get; set; }
+
 
         [Phone(ErrorMessage = "Invalid phone number")]
         public string PhoneNumber { get; set; }

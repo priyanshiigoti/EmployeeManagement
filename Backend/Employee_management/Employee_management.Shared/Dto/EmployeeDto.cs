@@ -23,7 +23,7 @@ namespace Employee_management.Shared.Dto
         public string PhoneNumber { get; set; }
 
         [Range(1, int.MaxValue, ErrorMessage = "Department must be selected")]
-        public int DepartmentId { get; set; }
+        public int? DepartmentId { get; set; }
 
         public string? DepartmentName { get; set; }
 

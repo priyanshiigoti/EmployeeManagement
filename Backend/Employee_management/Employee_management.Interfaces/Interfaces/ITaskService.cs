@@ -13,6 +13,8 @@ namespace Employee_management.Interfaces.Interfaces
         Task<(bool Success, string Error)> UpdateAsync(TaskDto dto, string userId, string role);
         Task<bool> DeleteAsync(int id, string userId, string role);
         Task<IEnumerable<EmployeeDropdownDto>> GetEmployeesAsync(string userId, string role);
+        Task<PagedResponseDto<TaskDto>> GetPagedAsync(string userId, string role, PaginationRequestDto request);
+
     }
 }
 

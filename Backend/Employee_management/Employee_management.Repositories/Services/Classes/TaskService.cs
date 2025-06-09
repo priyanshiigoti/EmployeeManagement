@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Employee_management.Api.Services
+namespace Employee_management.Repositories.Services.Classes
 {
     public class TaskService : ITaskService
     {
@@ -213,37 +213,13 @@ namespace Employee_management.Api.Services
                 return false;
 
             // Admin bypasses all checks
-            if (role == "Admin")
+            if (role == "Manager")
             {
                 _context.Tasks.Remove(task);
                 await _context.SaveChangesAsync();
-                return true;
+
             }
 
-            if (role == "Employee")
-            {
-                // Employees can only delete their own tasks
-                if (task.AssignedToId != userId)
-                    return false;
-            }
-            else if (role == "Manager")
-            {
-                var manager = await _context.Employees
-                    .FirstOrDefaultAsync(e => e.UserId == userId);
-
-                if (manager == null)
-                    return false;
-
-                // Check if task is in manager's department
-                var assignedEmp = await _context.Employees
-                    .FirstOrDefaultAsync(e => e.UserId == task.AssignedToId);
-
-                if (assignedEmp == null || assignedEmp.DepartmentId != manager.DepartmentId)
-                    return false;
-            }
-
-            _context.Tasks.Remove(task);
-            await _context.SaveChangesAsync();
             return true;
         }
 
@@ -282,6 +258,103 @@ namespace Employee_management.Api.Services
                 })
                 .ToListAsync();
         }
+
+        public async Task<PagedResponseDto<TaskDto>> GetPagedAsync(string userId, string role, PaginationRequestDto request)
+        {
+            var query = _context.Tasks
+                .Include(t => t.AssignedTo)
+                .Include(t => t.CreatedBy)
+                .AsQueryable();
+
+            // 🔐 Authorization Filters
+            if (role == "Employee")
+            {
+                query = query.Where(t => t.AssignedToId == userId);
+            }
+            else if (role == "Manager")
+            {
+                var manager = await _context.Employees
+                    .Include(e => e.Department)
+                    .FirstOrDefaultAsync(e => e.UserId == userId);
+
+                if (manager != null)
+                {
+                    var employeeIds = await _context.Employees
+                        .Where(e => e.DepartmentId == manager.DepartmentId)
+                        .Select(e => e.UserId)
+                        .ToListAsync();
+
+                    query = query.Where(t => employeeIds.Contains(t.AssignedToId) || t.CreatedById == userId);
+                }
+            }
+
+            // 🔍 Search
+            if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+            {
+                query = query.Where(t =>
+                    t.Title.Contains(request.SearchTerm) ||
+                    t.Description.Contains(request.SearchTerm));
+            }
+
+            // 🔃 Sorting
+            switch (request.SortColumn?.ToLower())
+            {
+                case "title":
+                    query = request.SortDirection == "desc" ? query.OrderByDescending(t => t.Title) : query.OrderBy(t => t.Title);
+                    break;
+                case "duedate":
+                    query = request.SortDirection == "desc" ? query.OrderByDescending(t => t.DueDate) : query.OrderBy(t => t.DueDate);
+                    break;
+                case "status":
+                    query = request.SortDirection == "desc" ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status);
+                    break;
+                default:
+                    query = query.OrderBy(t => t.Title); // Default sort
+                    break;
+            }
+
+            var totalCount = await query.CountAsync();
+
+            // 📄 Paging
+            var items = await query
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToListAsync();
+
+            // 🧠 Load employees for name/department mapping
+            var employees = await _context.Employees
+                .Include(e => e.User)
+                .Include(e => e.Department)
+                .ToListAsync();
+
+            var taskDtos = items.Select(t => new TaskDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Description = t.Description,
+                DueDate = t.DueDate,
+                Status = t.Status,
+                AssignedUserId = t.AssignedToId,
+                AssignedEmployeeName = employees
+                    .Where(e => e.UserId == t.AssignedToId)
+                    .Select(e => $"{e.User.FirstName} {e.User.LastName}")
+                    .FirstOrDefault(),
+                DepartmentId = employees
+                    .Where(e => e.UserId == t.AssignedToId)
+                    .Select(e => e.DepartmentId)
+                    .FirstOrDefault()
+            }).ToList();
+
+            return new PagedResponseDto<TaskDto>
+            {
+                Draw = request.Draw,
+                CurrentPage = request.Page,
+                PageSize = request.PageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize),
+                Items = taskDtos
+            };
+        }
+
     }
 }
- 

@@ -1,10 +1,9 @@
 using Employee_management.Api.Data;
 using Employee_management.Api.Data.SeedData;
 using Employee_management.Api.Helper;
-using Employee_management.Api.Services;
-using Employee_management.Api.Services.Classes;
-using Employee_management.Interfaces.Classes;
+
 using Employee_management.Interfaces.Interfaces;
+using Employee_management.Repositories.Services.Classes;
 using Employee_management.Shared;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;

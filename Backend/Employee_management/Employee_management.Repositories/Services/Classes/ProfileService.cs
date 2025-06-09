@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Employee_management.Api.Services
+namespace Employee_management.Repositories.Services.Classes
 {
     public class ProfileService : IProfileService
     {

@@ -89,5 +89,18 @@ namespace Employee_management.Api.Controllers
             return Ok(employees);
         }
 
+        [HttpPost("paged")]
+        public async Task<IActionResult> GetPagedTasks([FromBody] PaginationRequestDto request)
+        {
+            var userId = GetUserId();
+            var role = GetUserRole();
+
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _taskService.GetPagedAsync(userId, role, request);
+            return Ok(result);
+        }
+
     }
 }

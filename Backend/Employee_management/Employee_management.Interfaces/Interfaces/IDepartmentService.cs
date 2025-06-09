@@ -11,6 +11,6 @@ namespace Employee_management.Interfaces.Interfaces
         Task<bool> UpdateDepartmentAsync(DepartmentDto dto);
         //Task<DeleteResult> DeleteDepartmentAsync(int id);
         Task<PagedResponseDto<DepartmentDto>> GetDepartmentsPaginatedAsync(PaginationRequestDto request);
-        Task DeleteDepartmentAsync(int id);
+        Task<bool> DeleteDepartmentAsync(int id);
     }
 }

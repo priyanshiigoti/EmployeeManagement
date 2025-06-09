@@ -175,6 +175,17 @@ namespace Employee_management.Api.Controllers
         {
             try
             {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                // Validate department exists if assigned
+                if (dto.DepartmentId != null)  // Changed from HasValue
+                {
+                    var departmentExists = await _context.Departments.AnyAsync(d => d.Id == dto.DepartmentId);
+                    if (!departmentExists)
+                        return BadRequest(new { Message = "Invalid department specified." });
+                }
+
                 var (success, errorMessage) = await _employeeService.CreateManagerAsync(dto);
                 if (!success)
                     return BadRequest(new { Message = errorMessage });
@@ -184,6 +195,33 @@ namespace Employee_management.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating manager");
+                return StatusCode(500, new { Message = "Internal Server Error", Error = ex.Message });
+            }
+        }
+
+        [HttpPut("manager/{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateManager(int id, [FromBody] UpdateManagerDto dto)
+        {
+            try
+            {
+                // Validate department exists if assigned
+                if (dto.DepartmentId != null)  // Changed from HasValue
+                {
+                    var departmentExists = await _context.Departments.AnyAsync(d => d.Id == dto.DepartmentId);
+                    if (!departmentExists)
+                        return BadRequest(new { Message = "Invalid department specified." });
+                }
+
+                var result = await _employeeService.UpdateManagerAsync(id, dto);
+                if (!result)
+                    return NotFound();
+
+                return Ok(new { Message = "Manager updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating manager");
                 return StatusCode(500, new { Message = "Internal Server Error", Error = ex.Message });
             }
         }
@@ -199,44 +237,42 @@ namespace Employee_management.Api.Controllers
             return Ok(manager);
         }
 
-        [HttpPut("manager/{id}")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateManager(int id, [FromBody] UpdateManagerDto dto)
-        {
-            var result = await _employeeService.UpdateManagerAsync(id, dto);
-            if (!result)
-                return NotFound();
 
-            return Ok(new { Message = "Manager updated successfully" });
-        }
-
-        [HttpDelete("manager/{userId}")]
+        [HttpDelete("manager/{employeeId}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> DeleteManager(string userId)
+        public async Task<IActionResult> DeleteManager(int employeeId)
         {
+            // Find the Employee record by employeeId, including the related User entity
             var managerEmployee = await _context.Employees
                 .Include(e => e.User)
-                .FirstOrDefaultAsync(e => e.UserId == userId);
+                .FirstOrDefaultAsync(e => e.Id == employeeId);
 
             if (managerEmployee == null)
-                return NotFound("Manager not found");
+                return NotFound(new { Message = "Manager not found" });
 
-            var managesEmployees = await _context.Employees.AnyAsync(e => e.ManagerId == userId);
+            // Check if this manager is assigned as a manager to any employees
+            var managesEmployees = await _context.Employees.AnyAsync(e => e.ManagerId == managerEmployee.UserId);
             if (managesEmployees)
-                return BadRequest("Cannot delete manager: they are assigned as manager to other employees.");
+                return BadRequest(new { Message = "Cannot delete manager: they are assigned as manager to other employees." });
 
-            var hasAssignedTasks = await _context.Tasks.AnyAsync(t => t.AssignedToId == userId);
+            // Check if this manager is assigned to any tasks
+            var hasAssignedTasks = await _context.Tasks.AnyAsync(t => t.AssignedToId == managerEmployee.UserId);
             if (hasAssignedTasks)
-                return BadRequest("Cannot delete manager: they are assigned to tasks.");
+                return BadRequest(new { Message = "Cannot delete manager: they are assigned to tasks." });
 
+            // Remove the User entity if it exists
             if (managerEmployee.User != null)
                 _context.Users.Remove(managerEmployee.User);
 
+            // Remove the Employee entity
             _context.Employees.Remove(managerEmployee);
+
+            // Save changes to the database
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Manager deleted successfully" });
         }
+
 
         [HttpGet("{id}")]
         [Authorize(Roles = "Admin,Manager")]
@@ -249,12 +285,21 @@ namespace Employee_management.Api.Controllers
             return Ok(employee);
         }
 
-        [HttpGet("active-departments")]
-        [AllowAnonymous]
+        [HttpGet("active")]
+        [AllowAnonymous] 
         public async Task<IActionResult> GetActiveDepartments()
         {
-            var departments = await _employeeService.GetActiveDepartmentsAsync();
+            var departments = await _context.Departments
+                .Where(d => d.IsActive) // Only if you have IsActive column
+                .Select(d => new
+                {
+                    id = d.Id,
+                    name = d.Name
+                })
+                .ToListAsync();
+
             return Ok(departments);
         }
+
     }
 }

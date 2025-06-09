@@ -1,5 +1,4 @@
-﻿
-using Employee_management.Shared;
+﻿using Employee_management.Shared;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
@@ -46,22 +45,11 @@ namespace Employee_management.Repositories.Services.Classes
             _emailSender = emailSender;
         }
 
-        // ============================
-        // ✅ Register New Employee
-        // ============================
+
         public async Task<AuthResponse> RegisterEmployeeAsync(UserRegistrationDto dto)
         {
             try
             {
-                // 1. Check if role exists
-                if (!await _roleManager.RoleExistsAsync(dto.Role))
-                {
-                    return new AuthResponse
-                    {
-                        IsSuccess = false,
-                        Message = $"Role '{dto.Role}' does not exist."
-                    };
-                }
 
                 // 2. Check for existing email
                 var existingUser = await _userManager.FindByEmailAsync(dto.Email);
@@ -71,6 +59,18 @@ namespace Employee_management.Repositories.Services.Classes
                     {
                         IsSuccess = false,
                         Message = "Email is already in use."
+                    };
+                }
+
+                // 2.5. Check for existing phone number
+                var existingPhoneUser = await _userManager.Users
+                    .FirstOrDefaultAsync(u => u.PhoneNumber == dto.PhoneNumber);
+                if (existingPhoneUser != null)
+                {
+                    return new AuthResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Phone number is already registered."
                     };
                 }
 
@@ -126,17 +126,17 @@ namespace Employee_management.Repositories.Services.Classes
                 // 6. Generate Email Confirmation Token
                 var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
-                // 7. Build Confirmation URL (adjust ClientUrl and endpoint as per your setup)
+                // 7. Build Confirmation URL
                 var confirmationUrl = $"{_config["ApiBaseUrl"]}api/account/confirm-email?userId={user.Id}&token={System.Net.WebUtility.UrlEncode(token)}";
 
-                // 8. Send confirmation email (assumes you have IEmailSender _emailSender injected)
+                // 8. Send confirmation email
                 await _emailSender.SendEmailAsync(user.Email, "Confirm your email",
                     $@"Please confirm your email by clicking the link below:<br/><br/>
-            <a href='{confirmationUrl}'>Click to confirm your email</a><br/><br/>
-            If the above link doesn't work, copy and paste this into your browser:<br/>
-            {confirmationUrl}");
+    <a href='{confirmationUrl}'>Click to confirm your email</a><br/><br/>
+    If the above link doesn't work, copy and paste this into your browser:<br/>
+    {confirmationUrl}");
 
-                // 9. Return success response with message
+                // 9. Return success response
                 return new AuthResponse
                 {
                     IsSuccess = true,
@@ -145,7 +145,6 @@ namespace Employee_management.Repositories.Services.Classes
             }
             catch (Exception ex)
             {
-                // Log exception here if needed
                 return new AuthResponse
                 {
                     IsSuccess = false,
@@ -154,35 +153,57 @@ namespace Employee_management.Repositories.Services.Classes
             }
         }
 
-        // ============================
-        // ✅ Login and Issue JWT
-        // ============================
+      
+
         public async Task<object> LoginAsync(LoginDto dto)
         {
-            // 1. Validate user
+            // 1. Validate user exists
             var user = await _userManager.FindByEmailAsync(dto.Email);
             if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
-                return null;
+                return null; // Invalid credentials
 
             // 2. Get roles
             var roles = await _userManager.GetRolesAsync(user);
 
-            // 3. Create claims
-            var claims = new List<Claim>
+            // 3. Check if email is confirmed only if user is in "Employee" role
+            if (roles.Contains("Employee") && !user.EmailConfirmed)
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Name, user.UserName ?? "")
-            };
+                return new AuthResponse
+                {
+                    IsSuccess = false,
+                    Message = "Email not confirmed. Please check your email to confirm your account before logging in."
+                };
+            }
+
+            if (roles.Contains("Employee"))
+            {
+                var emp = await _context.Employees.FirstOrDefaultAsync(e => e.UserId == user.Id);
+                if (emp == null || !emp.IsActive)
+                {
+                    return new AuthResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Your account is inactive. Please contact administrator."
+                    };
+                }
+            }
+
+            // 4. Create claims
+            var claims = new List<Claim>
+    {
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+        new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+        new Claim(ClaimTypes.Name, user.UserName ?? "")
+    };
 
             foreach (var role in roles)
             {
                 claims.Add(new Claim(ClaimTypes.Role, role));
             }
 
-            // 4. Get JWT settings
+            // 5. JWT token generation
             var jwtSettings = _config.GetSection("JwtSettings");
             var secretKey = jwtSettings["SecretKey"];
             var issuer = jwtSettings["Issuer"];
@@ -192,7 +213,6 @@ namespace Employee_management.Repositories.Services.Classes
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            // 5. Create token
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
@@ -212,6 +232,8 @@ namespace Employee_management.Repositories.Services.Classes
                 roles = roles
             };
         }
+
+
 
         public async Task<AuthResponse> ConfirmEmailAsync(string userId, string token)
         {

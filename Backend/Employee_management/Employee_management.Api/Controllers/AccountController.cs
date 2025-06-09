@@ -51,6 +51,28 @@ namespace Employee_management.Repositories.Service.Classes
         }
 
 
+        //[HttpPost("Login")]
+        //[AllowAnonymous]
+        //public async Task<IActionResult> Login([FromBody] LoginDto dto)
+        //{
+        //    if (!ModelState.IsValid)
+        //        return BadRequest(ModelState);
+
+        //    try
+        //    {
+        //        var response = await _accountService.LoginAsync(dto);
+        //        if (response == null)
+        //            return Unauthorized(new { Message = "Invalid credentials." });
+
+        //        return Ok(response);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error during login");
+        //        return StatusCode(500, new { Message = "An error occurred during login." });
+        //    }
+        //}
+
         [HttpPost("Login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
@@ -61,8 +83,17 @@ namespace Employee_management.Repositories.Service.Classes
             try
             {
                 var response = await _accountService.LoginAsync(dto);
+
                 if (response == null)
+                {
                     return Unauthorized(new { Message = "Invalid credentials." });
+                }
+
+                // If response is AuthResponse with failure (like email not confirmed)
+                if (response is AuthResponse authResponse && !authResponse.IsSuccess)
+                {
+                    return Unauthorized(new { Message = authResponse.Message });
+                }
 
                 return Ok(response);
             }
@@ -72,6 +103,7 @@ namespace Employee_management.Repositories.Service.Classes
                 return StatusCode(500, new { Message = "An error occurred during login." });
             }
         }
+
 
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail(string userId, string token)

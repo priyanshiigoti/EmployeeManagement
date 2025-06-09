@@ -13,8 +13,8 @@ namespace Employee_management.Shared
         public string UserId { get; set; }
         public ApplicationUser User { get; set; }
 
-        public int DepartmentId { get; set; }
-        public Department Department { get; set; }
+        public int? DepartmentId { get; set; }
+        public Department? Department { get; set; }
 
         public string? ManagerId { get; set; }
         public ApplicationUser? Manager { get; set; }

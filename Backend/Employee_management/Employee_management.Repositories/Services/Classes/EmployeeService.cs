@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Employee_management.Api.Services.Classes
+namespace Employee_management.Repositories.Services.Classes
 {
     public class EmployeeService : IEmployeeService
     {
@@ -267,7 +267,7 @@ namespace Employee_management.Api.Services.Classes
             var employee = new Employee
             {
                 UserId = user.Id,
-                DepartmentId = dto.DepartmentId,
+                DepartmentId = dto.DepartmentId,  // This will work with nullable int
                 IsActive = dto.IsActive,
                 HireDate = DateTime.UtcNow
             };
@@ -459,24 +459,17 @@ namespace Employee_management.Api.Services.Classes
             return await _userManager.FindByIdAsync(userId);
         }
 
+
         public async Task<PagedResponseDto<CreateManagerDto>> GetManagersPaginatedAsync(PaginationRequestDto request)
         {
-            // Base query: Employees whose User is in Manager role
+            // Get all user IDs of managers first (better approach)
+            var managerUserIds = (await _userManager.GetUsersInRoleAsync("Manager")).Select(u => u.Id).ToHashSet();
+
             var query = _context.Employees
                 .Include(e => e.User)
-                .Include(e => e.Department)
-                .Where(e => _userManager.IsInRoleAsync(e.User, "Manager").Result) // Warning: .Result can cause deadlocks, see note below
+                .Include(e => e.Department) // Make sure to include Department
+                .Where(e => managerUserIds.Contains(e.UserId))
                 .AsQueryable();
-
-            // Alternative without .Result inside LINQ (better approach)
-            // Get all user IDs of managers first
-            var managerUserIds = await _userManager.GetUsersInRoleAsync("Manager");
-            var managerUserIdSet = managerUserIds.Select(u => u.Id).ToHashSet();
-
-            query = _context.Employees
-                .Include(e => e.User)
-                .Include(e => e.Department)
-                .Where(e => managerUserIdSet.Contains(e.UserId));
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(request.SearchTerm))
@@ -485,72 +478,62 @@ namespace Employee_management.Api.Services.Classes
                 query = query.Where(e =>
                     e.User.FirstName.ToLower().Contains(searchTerm) ||
                     e.User.LastName.ToLower().Contains(searchTerm) ||
-                    e.User.Email.ToLower().Contains(searchTerm));
+                    e.User.Email.ToLower().Contains(searchTerm) ||
+                    (e.Department != null && e.Department.Name.ToLower().Contains(searchTerm)));
             }
 
             // Get total count
             var totalCount = await query.CountAsync();
 
             // Calculate paging parameters
-            int pageSize = request.Length > 0 ? request.Length : 10;
-            int pageNumber = (request.Start / pageSize) + 1;
+            int pageSize = request.PageSize > 0 ? request.PageSize : 10;
+            int pageNumber = request.Page > 0 ? request.Page : 1;
 
             // Sorting
-            bool ascending = request.SortDirection.ToLower() == "asc";
-            switch (request.SortColumn.ToLower())
+            bool ascending = request.SortDirection?.ToLower() == "asc";
+            var sortColumn = request.SortColumn?.ToLower() ?? "firstname";
+
+            query = (sortColumn, ascending) switch
             {
-                case "firstname":
-                    query = ascending ? query.OrderBy(e => e.User.FirstName) : query.OrderByDescending(e => e.User.FirstName);
-                    break;
-                case "lastname":
-                    query = ascending ? query.OrderBy(e => e.User.LastName) : query.OrderByDescending(e => e.User.LastName);
-                    break;
-                case "email":
-                    query = ascending ? query.OrderBy(e => e.User.Email) : query.OrderByDescending(e => e.User.Email);
-                    break;
-                case "department":
-                    query = ascending ? query.OrderBy(e => e.Department.Name) : query.OrderByDescending(e => e.Department.Name);
-                    break;
-                default:
-                    query = ascending ? query.OrderBy(e => e.Id) : query.OrderByDescending(e => e.Id);
-                    break;
-            }
+                ("firstname", true) => query.OrderBy(e => e.User.FirstName),
+                ("firstname", false) => query.OrderByDescending(e => e.User.FirstName),
+                ("lastname", true) => query.OrderBy(e => e.User.LastName),
+                ("lastname", false) => query.OrderByDescending(e => e.User.LastName),
+                ("email", true) => query.OrderBy(e => e.User.Email),
+                ("email", false) => query.OrderByDescending(e => e.User.Email),
+                ("department", true) => query.OrderBy(e => e.Department.Name),
+                ("department", false) => query.OrderByDescending(e => e.Department.Name),
+                _ => query.OrderBy(e => e.User.FirstName)
+            };
 
             // Fetch paged data
             var pagedManagers = await query
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
+                .Select(e => new CreateManagerDto
+                {
+                    Id = e.Id,
+                    FirstName = e.User.FirstName,
+                    LastName = e.User.LastName,
+                    Email = e.User.Email,
+                    PhoneNumber = e.User.PhoneNumber,
+                    DepartmentId = e.DepartmentId,
+                    DepartmentName = e.Department != null ? e.Department.Name : "Unassigned",
+                    IsActive = e.IsActive
+                })
                 .ToListAsync();
-
-            // Map entities to DTOs
-            var managerDtos = pagedManagers.Select(e => new CreateManagerDto
-            {
-                FirstName = e.User.FirstName,
-                LastName = e.User.LastName,
-                Email = e.User.Email,
-                PhoneNumber = e.User.PhoneNumber,
-                DepartmentId = e.DepartmentId,
-                IsActive = e.IsActive,
-                Password = null // never send password back
-            }).ToList();
-
-            // Calculate total pages
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
             // Return paged response DTO
             return new PagedResponseDto<CreateManagerDto>
             {
                 Draw = request.Draw,
                 CurrentPage = pageNumber,
-                TotalPages = totalPages,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
                 PageSize = pageSize,
                 TotalCount = totalCount,
-                Items = managerDtos
+                Items = pagedManagers
             };
         }
-
-
-
 
     }
 }
