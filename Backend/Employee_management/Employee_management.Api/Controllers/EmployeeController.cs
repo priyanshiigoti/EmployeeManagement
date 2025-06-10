@@ -4,6 +4,7 @@ using Employee_management.Shared.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -21,15 +22,18 @@ namespace Employee_management.Api.Controllers
         private readonly IEmployeeService _employeeService;
         private readonly ApplicationDbContext _context;
         private readonly ILogger<EmployeeController> _logger;
+        private readonly IWebHostEnvironment _env;
 
         public EmployeeController(
             IEmployeeService employeeService,
             ApplicationDbContext context,
-            ILogger<EmployeeController> logger)
+            ILogger<EmployeeController> logger,
+            IWebHostEnvironment env)
         {
             _employeeService = employeeService;
             _context = context;
             _logger = logger;
+            _env = env;
         }
 
         // GET: api/Employee
@@ -171,7 +175,7 @@ namespace Employee_management.Api.Controllers
 
         [HttpPost("manager")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> CreateManager([FromBody] CreateManagerDto dto)
+        public async Task<IActionResult> CreateManager([FromForm] CreateManagerDto dto)
         {
             try
             {
@@ -179,12 +183,34 @@ namespace Employee_management.Api.Controllers
                     return BadRequest(ModelState);
 
                 // Validate department exists if assigned
-                if (dto.DepartmentId != null)  // Changed from HasValue
+                if (dto.DepartmentId != null)
                 {
                     var departmentExists = await _context.Departments.AnyAsync(d => d.Id == dto.DepartmentId);
                     if (!departmentExists)
                         return BadRequest(new { Message = "Invalid department specified." });
                 }
+
+                string? profileImagePath = null;
+                if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
+                {
+                    // Save the image to wwwroot/images/managers or any folder
+                    var uploadsFolder = Path.Combine(_env.WebRootPath, "images", "managers");
+                    if (!Directory.Exists(uploadsFolder))
+                        Directory.CreateDirectory(uploadsFolder);
+
+                    var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
+                    var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await dto.ProfileImage.CopyToAsync(fileStream);
+                    }
+
+                    profileImagePath = Path.Combine("images", "managers", uniqueFileName).Replace("\\", "/");
+                }
+
+                // Set the ProfileImagePath in dto for the service method
+                dto.ProfileImagePath = profileImagePath;
 
                 var (success, errorMessage) = await _employeeService.CreateManagerAsync(dto);
                 if (!success)
@@ -199,18 +225,25 @@ namespace Employee_management.Api.Controllers
             }
         }
 
+
         [HttpPut("manager/{id}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateManager(int id, [FromBody] UpdateManagerDto dto)
+        public async Task<IActionResult> UpdateManager(int id, [FromForm] UpdateManagerDto dto)
         {
             try
             {
-                // Validate department exists if assigned
-                if (dto.DepartmentId != null)  // Changed from HasValue
+                if (dto.DepartmentId != null)
                 {
                     var departmentExists = await _context.Departments.AnyAsync(d => d.Id == dto.DepartmentId);
                     if (!departmentExists)
                         return BadRequest(new { Message = "Invalid department specified." });
+                }
+
+                // If ProfileImage is present, save it first and set ProfileImagePath
+                if (dto.ProfileImage != null)
+                {
+                    var imagePath = await _employeeService.SaveProfileImageAsync(dto.ProfileImage);
+                    dto.ProfileImagePath = imagePath;
                 }
 
                 var result = await _employeeService.UpdateManagerAsync(id, dto);
@@ -225,6 +258,7 @@ namespace Employee_management.Api.Controllers
                 return StatusCode(500, new { Message = "Internal Server Error", Error = ex.Message });
             }
         }
+
 
         [HttpGet("manager/{id}")]
         [Authorize(Roles = "Admin")]

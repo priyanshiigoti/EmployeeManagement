@@ -7,5 +7,7 @@
         public string PhoneNumber { get; set; }
         public string CurrentPassword { get; set; } // For password change
         public string NewPassword { get; set; }    // For password change
+        public string ProfileImagePath { get; set; }
+
     }
 }

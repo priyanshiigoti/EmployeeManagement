@@ -27,6 +27,8 @@ import {
   deleteEmployee,
 } from '../services/employeeService';
 
+import api from '../axiosConfig'; // adjust the path as needed
+
 function EmployeeList() {
   const [employees, setEmployees] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -82,18 +84,17 @@ function EmployeeList() {
     }
   }, [page, pageSize, sortColumn, sortDirection, searchTerm]);
 
-  const fetchDepartments = async () => {
-    setDepartmentLoading(true);
-    try {
-      const response = await fetch('https://localhost:7231/api/Employee/active-departments');
-      const deptData = await response.json();
-      setDepartments(deptData);
-    } catch (error) {
-      console.error('Failed to fetch departments:', error);
-    } finally {
-      setDepartmentLoading(false);
-    }
-  };
+ const fetchDepartments = async () => {
+  setDepartmentLoading(true);
+  try {
+    const response = await api.get('/Employee/active');
+    setDepartments(response.data);
+  } catch (error) {
+    console.error('Failed to fetch departments:', error);
+  } finally {
+    setDepartmentLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchEmployees();
@@ -288,7 +289,19 @@ function EmployeeList() {
             ) : (
               employees.map((emp) => (
                 <TableRow key={emp.id} hover>
-                  <TableCell>{emp.firstName + ' ' + emp.lastName}</TableCell>
+                  <TableCell>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                     <Avatar
+  src={emp.profileImagePath ? `https://localhost:7231/${emp.profileImagePath.replace(/^\/?/, '')}` : undefined}
+  sx={{ width: 40, height: 40, mr: 2 }}
+>
+  {!emp.profileImagePath &&
+    `${emp.firstName?.charAt(0) ?? ''}${emp.lastName?.charAt(0) ?? ''}`}
+</Avatar>
+
+                      {`${emp.firstName} ${emp.lastName}`}
+                    </div>
+                  </TableCell>
                   <TableCell>{emp.email}</TableCell>
                   <TableCell>{emp.phoneNumber || '-'}</TableCell>
                   <TableCell>
@@ -340,84 +353,84 @@ function EmployeeList() {
 
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>{currentEmployee ? 'Edit Employee' : 'Add Employee'}</DialogTitle>
-        <DialogContent sx={{ pt: 2, minWidth: 400 }}>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="First Name"
-            name="firstName"
-            fullWidth
-            variant="outlined"
-            value={formData.firstName}
-            onChange={handleChange}
-            required
-            disabled={isSubmitting}
-          />
-          <TextField
-            margin="dense"
-            label="Last Name"
-            name="lastName"
-            fullWidth
-            variant="outlined"
-            value={formData.lastName}
-            onChange={handleChange}
-            required
-            disabled={isSubmitting}
-          />
-          <TextField
-            margin="dense"
-            label="Email"
-            name="email"
-            type="email"
-            fullWidth
-            variant="outlined"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            disabled={!!currentEmployee || isSubmitting}
-          />
-          <TextField
-            margin="dense"
-            label="Phone Number"
-            name="phoneNumber"
-            fullWidth
-            variant="outlined"
-            value={formData.phoneNumber}
-            onChange={handleChange}
-            disabled={isSubmitting}
-          />
+       <DialogContent sx={{ pt: 2, minWidth: 400 }}>
+  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+  <Avatar 
+  src={currentEmployee?.profileImagePath ? `https://localhost:7231/${currentEmployee.profileImagePath.replace(/^\/?/, '')}` : undefined}
+  sx={{ width: 100, height: 100 }}
+>
+  {currentEmployee?.firstName?.charAt(0)}
+  {currentEmployee?.lastName?.charAt(0)}
+</Avatar>
 
-          <FormControl fullWidth margin="dense" required>
-            <InputLabel>Department</InputLabel>
-            <Select
-              name="departmentId"
-              value={formData.departmentId}
-              onChange={handleChange}
-              label="Department"
-              disabled={isSubmitting || departmentLoading}
-            >
-              {departments.map((dept) => (
-                <MenuItem key={dept.id} value={dept.id}>
-                  {dept.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+  </div>
 
-          <FormControlLabel
-            control={
-              <Checkbox
-                name="isActive"
-                checked={formData.isActive}
-                onChange={handleChange}
-                color="primary"
-                disabled={isSubmitting}
-              />
-            }
-            label="Active Employee"
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
+  {/* Rest of the form fields below */}
+  <TextField
+    margin="dense"
+    label="First Name"
+    fullWidth
+    name="firstName"
+    value={formData.firstName}
+    onChange={handleChange}
+    required
+  />
+  <TextField
+    margin="dense"
+    label="Last Name"
+    fullWidth
+    name="lastName"
+    value={formData.lastName}
+    onChange={handleChange}
+    required
+  />
+  <TextField
+    margin="dense"
+    label="Email"
+    fullWidth
+    name="email"
+    type="email"
+    value={formData.email}
+    onChange={handleChange}
+    required
+      InputProps={{ readOnly: true }}  // <-- added this line
+
+  />
+  <TextField
+    margin="dense"
+    label="Phone Number"
+    fullWidth
+    name="phoneNumber"
+    value={formData.phoneNumber}
+    onChange={handleChange}
+  />
+  <FormControl fullWidth margin="dense">
+    <InputLabel>Department</InputLabel>
+    <Select
+      name="departmentId"
+      value={formData.departmentId}
+      onChange={handleChange}
+      required
+    >
+      {departments.map((dept) => (
+        <MenuItem key={dept.id} value={dept.id}>
+          {dept.name}
+        </MenuItem>
+      ))}
+    </Select>
+  </FormControl>
+  <FormControlLabel
+    control={
+      <Checkbox
+        checked={formData.isActive}
+        onChange={handleChange}
+        name="isActive"
+      />
+    }
+    label="Active"
+  />
+</DialogContent>
+
         <DialogActions>
           <Button onClick={handleCloseDialog} startIcon={<CloseIcon />} color="secondary" disabled={isSubmitting}>
             Cancel

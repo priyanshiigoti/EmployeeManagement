@@ -2,6 +2,7 @@
 using Employee_management.Interfaces.Interfaces;
 using Employee_management.Shared;
 using Employee_management.Shared.Dto;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -29,7 +30,9 @@ namespace Employee_management.Repositories.Services.Classes
                     u.FirstName,
                     u.LastName,
                     u.Email,
-                    u.PhoneNumber
+                    u.PhoneNumber,
+                    u.ProfileImagePath // return the image path
+
                 })
                 .FirstOrDefaultAsync();
 
@@ -51,7 +54,13 @@ namespace Employee_management.Repositories.Services.Classes
             user.LastName = dto.LastName;
             user.PhoneNumber = dto.PhoneNumber;
 
-            // Only process password change if new password is provided
+            // Update profile image path if provided
+            if (!string.IsNullOrEmpty(dto.ProfileImagePath))
+            {
+                user.ProfileImagePath = dto.ProfileImagePath;
+            }
+
+            // Rest of the method remains the same...
             if (!string.IsNullOrWhiteSpace(dto.NewPassword))
             {
                 if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
@@ -70,11 +79,42 @@ namespace Employee_management.Repositories.Services.Classes
                     return (false, string.Join(", ", result.Errors.Select(e => e.Description)));
             }
 
-            // Save profile updates
             var updateResult = await _userManager.UpdateAsync(user);
             return updateResult.Succeeded
                 ? (true, "Profile updated successfully")
                 : (false, string.Join(", ", updateResult.Errors.Select(e => e.Description)));
         }
+
+        public async Task<(bool success, string message)> UpdateProfileImageAsync(string userId, IFormFile file)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return (false, "User not found");
+
+            // Folder path for storing images - adjust as needed
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "profileimages");
+            if (!Directory.Exists(uploadsFolder))
+                Directory.CreateDirectory(uploadsFolder);
+
+            // Create unique file name
+            var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+            // Save the file
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(fileStream);
+            }
+
+            // Save relative path to user profile (adjust your ApplicationUser to have ProfileImagePath property)
+            user.ProfileImagePath = $"/uploads/profileimages/{uniqueFileName}";
+
+            var updateResult = await _userManager.UpdateAsync(user);
+
+            return updateResult.Succeeded
+                ? (true, "Profile image updated successfully")
+                : (false, string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+        }
+
     }
+
 }

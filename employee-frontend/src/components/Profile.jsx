@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from '../axiosConfig'; // adjust path if needed
+import axios from '../axiosConfig';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -11,6 +11,7 @@ const Profile = () => {
     lastName: '',
     email: '',
     phoneNumber: '',
+    profileImagePath: '',
   });
   const [formData, setFormData] = useState({
     firstName: '',
@@ -19,6 +20,8 @@ const Profile = () => {
     currentPassword: '',
     newPassword: '',
   });
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -61,51 +64,88 @@ const Profile = () => {
         currentPassword: '',
         newPassword: '',
       }));
+      setSelectedImage(null);
     }
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleImageChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedImage(e.target.files[0]);
+    }
+  };
 
-  try {
-    const token = localStorage.getItem('token');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     
-    // Use camelCase for all properties
-    const updateData = {
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      phoneNumber: formData.phoneNumber,
-      currentPassword: formData.currentPassword,
-      newPassword: formData.newPassword
-    };
+    try {
+      const token = localStorage.getItem('token');
+      let imagePath = profileData.profileImagePath;
 
-    console.log('Update payload:', updateData);
-    
-    await axios.put('https://localhost:7231/api/profile', updateData, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+      // Upload new image if selected
+      if (selectedImage) {
+        setIsUploading(true);
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', selectedImage);
 
-    toast.success('Profile updated successfully');
-    setProfileData(prev => ({
-      ...prev,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      phoneNumber: formData.phoneNumber,
-    }));
-    setIsEditing(false);
-  } catch (error) {
-    // Handle different error response formats
-    const serverError = error.response?.data;
-    const errorMessage = 
-      serverError?.message ||    // If using new { message }
-      serverError?.Message ||    // If using new { Message }
-      serverError?.title ||      // Validation error format
-      'Failed to update profile';
-    
-    toast.error(errorMessage);
-    console.error('Update failed:', error.response?.data);
-  }
-};
+        try {
+          await axios.post('https://localhost:7231/api/profile/upload-image', uploadFormData, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            }
+          });
+
+          // Refresh profile to get new image path
+          const profileResponse = await axios.get('https://localhost:7231/api/profile', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          imagePath = profileResponse.data.profileImagePath;
+          setProfileData(profileResponse.data);
+        } catch (uploadError) {
+          const errMsg = uploadError.response?.data?.message || 'Failed to upload image';
+          toast.error(errMsg);
+          setIsUploading(false);
+          return;
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
+      // Update profile data
+      const updateData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber,
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword,
+        profileImagePath: imagePath
+      };
+
+      const updateResponse = await axios.put('https://localhost:7231/api/profile', updateData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      toast.success('Profile updated successfully');
+      
+      // Refresh profile data after update
+      const refreshedProfile = await axios.get('https://localhost:7231/api/profile', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProfileData(refreshedProfile.data);
+      setIsEditing(false);
+      setSelectedImage(null);
+    } catch (error) {
+      const serverError = error.response?.data;
+      const errorMessage = 
+        serverError?.message || 
+        serverError?.Message || 
+        serverError?.title || 
+        'Failed to update profile';
+      
+      toast.error(errorMessage);
+      console.error('Update failed:', error.response?.data);
+    }
+  };
 
   if (loading) {
     return <div className="text-center mt-5">Loading profile...</div>;
@@ -118,17 +158,59 @@ const Profile = () => {
           <div className="card">
             <div className="card-header d-flex justify-content-between align-items-center">
               <h3>My Profile</h3>
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={toggleEdit}
-              >
+              <button className="btn btn-sm btn-primary" onClick={toggleEdit}>
                 {isEditing ? 'Cancel' : 'Edit Profile'}
               </button>
             </div>
 
             <div className="card-body">
+              <div className="mb-3 text-center">
+                {profileData.profileImagePath ? (
+                  <img
+                    src={`https://localhost:7231${profileData.profileImagePath.startsWith('/') ? '' : '/'}${profileData.profileImagePath}`}
+                    alt="Profile"
+                    style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: '50%' }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://via.placeholder.com/120';
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      lineHeight: '120px',
+                      borderRadius: '50%',
+                      backgroundColor: '#ccc',
+                      display: 'inline-block',
+                      color: '#fff',
+                      fontSize: 24,
+                    }}
+                  >
+                    No Image
+                  </div>
+                )}
+              </div>
+
               {isEditing ? (
                 <form onSubmit={handleSubmit}>
+                  <div className="mb-3">
+                    <label htmlFor="profileImage" className="form-label">Profile Image</label>
+                    <input
+                      type="file"
+                      className="form-control"
+                      id="profileImage"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                    />
+                    {selectedImage && (
+                      <div className="mt-2">
+                        <span className="ms-2">{selectedImage.name}</span>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mb-3">
                     <label htmlFor="firstName" className="form-label">First Name</label>
                     <input
@@ -196,8 +278,12 @@ const Profile = () => {
                     </small>
                   </div>
 
-                  <button type="submit" className="btn btn-primary">
-                    Save Changes
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isUploading}
+                  >
+                    {isUploading ? 'Saving...' : 'Save Changes'}
                   </button>
                 </form>
               ) : (

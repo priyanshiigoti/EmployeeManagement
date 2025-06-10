@@ -47,5 +47,37 @@ namespace Employee_management.Api.Controllers
 
             return Ok(new { Message = message });
         }
+
+        [HttpPost("upload-image")]
+        public async Task<IActionResult> UploadProfileImage()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var files = Request.Form.Files;
+            if (files.Count == 0)
+                return BadRequest(new { Message = "No file uploaded." });
+
+            var file = files[0];
+
+            if (file.Length > 2 * 1024 * 1024) // 2 MB limit for example
+                return BadRequest(new { Message = "File size exceeds limit." });
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+            var extension = System.IO.Path.GetExtension(file.FileName).ToLower();
+
+            if (!allowedExtensions.Contains(extension))
+                return BadRequest(new { Message = "Invalid file type." });
+
+            // Pass to service for saving file and updating user profile image path
+            var (success, message) = await _profileService.UpdateProfileImageAsync(userId, file);
+
+            if (!success)
+                return BadRequest(new { Message = message });
+
+            return Ok(new { Message = message });
+        }
+
     }
 }

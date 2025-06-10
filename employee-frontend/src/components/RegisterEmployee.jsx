@@ -14,8 +14,10 @@ const RegisterEmployee = () => {
     confirmPassword: '',
     departmentId: '',
     role: 'Employee',
-  });
+        profileImage: null
 
+  });
+  const [previewImage, setPreviewImage] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [errors, setErrors] = useState([]);
   const [successMessage, setSuccessMessage] = useState('');
@@ -38,6 +40,20 @@ const response = await axios.get('Employee/active');
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFormData(prev => ({ ...prev, profileImage: file }));
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors([]);
@@ -51,18 +67,23 @@ const response = await axios.get('Employee/active');
     }
 
     try {
-      const payload = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phoneNumber: formData.phoneNumber,
-        password: formData.password,
-        role: formData.role,
-        departmentId: formData.departmentId ? parseInt(formData.departmentId) : null,
-      };
+      const formDataToSend = new FormData();
+      formDataToSend.append('FirstName', formData.firstName);
+      formDataToSend.append('LastName', formData.lastName);
+      formDataToSend.append('Email', formData.email);
+      formDataToSend.append('PhoneNumber', formData.phoneNumber);
+      formDataToSend.append('Password', formData.password);
+      formDataToSend.append('Role', formData.role);
+      formDataToSend.append('DepartmentId', formData.departmentId || '');
+      if (formData.profileImage) {
+        formDataToSend.append('ProfileImage', formData.profileImage);
+      }
 
-      const response = await axios.post('Account/RegisterEmployee', payload, {
-        headers: { 'Skip-Auth': 'true' },  // <---- HERE is the key change
+      const response = await axios.post('Account/RegisterEmployee', formDataToSend, {
+        headers: { 
+          'Skip-Auth': 'true',
+          'Content-Type': 'multipart/form-data'
+        },
       });
 
       if (response.status === 200 || response.status === 201) {
@@ -82,6 +103,7 @@ const response = await axios.get('Employee/active');
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="min-vh-100 d-flex align-items-center" style={{
@@ -208,6 +230,40 @@ const response = await axios.get('Employee/active');
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                    <div className="mb-4 text-center">
+                    <div className="mb-3">
+                      {previewImage ? (
+                        <img 
+                          src={previewImage} 
+                          alt="Profile preview" 
+                          className="rounded-circle"
+                          style={{ width: '120px', height: '120px', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div 
+                          className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                          style={{ width: '120px', height: '120px', margin: '0 auto' }}
+                        >
+                          <i className="bi bi-person fs-1 text-muted"></i>
+                        </div>
+                      )}
+                    </div>
+                    <label className="btn btn-outline-primary">
+                      Choose Profile Image
+                      <input 
+                        type="file" 
+                        className="d-none"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                      />
+                    </label>
+                    {formData.profileImage && (
+                      <p className="small text-muted mt-2 mb-0">
+                        {formData.profileImage.name}
+                      </p>
+                    )}
                   </div>
 
                   {/* Role hidden */}

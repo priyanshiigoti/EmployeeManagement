@@ -15,6 +15,7 @@ using Employee_management.Api.Data;
 using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Hosting;
 
 
 namespace Employee_management.Repositories.Services.Classes
@@ -27,6 +28,7 @@ namespace Employee_management.Repositories.Services.Classes
         private readonly ApplicationDbContext _context;
         private readonly ILogger<AccountService> _logger;
         private readonly IEmailSender _emailSender;
+        private readonly IWebHostEnvironment _env;
 
 
         public AccountService(
@@ -35,7 +37,7 @@ namespace Employee_management.Repositories.Services.Classes
             RoleManager<IdentityRole> roleManager,
             ApplicationDbContext context,
             ILogger<AccountService> logger,
-            IEmailSender emailSender)
+            IEmailSender emailSender, IWebHostEnvironment env)
         {
             _userManager = userManager;
             _config = config;
@@ -43,8 +45,8 @@ namespace Employee_management.Repositories.Services.Classes
             _context = context;
             _logger = logger;
             _emailSender = emailSender;
+            _env = env;
         }
-
 
         public async Task<AuthResponse> RegisterEmployeeAsync(UserRegistrationDto dto)
         {
@@ -74,6 +76,30 @@ namespace Employee_management.Repositories.Services.Classes
                     };
                 }
 
+                string profileImagePath = null;
+                if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
+                {
+                    var uploadsFolder = Path.Combine(
+                        _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"),
+                        "profile-images");
+
+                    if (!Directory.Exists(uploadsFolder))
+                    {
+                        Directory.CreateDirectory(uploadsFolder);
+                    }
+
+                    var uniqueFileName = Guid.NewGuid().ToString() + "_" + dto.ProfileImage.FileName;
+                    var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await dto.ProfileImage.CopyToAsync(fileStream);
+                    }
+
+                    profileImagePath = $"/profile-images/{uniqueFileName}";
+                }
+
+
                 // 3. Create new ApplicationUser
                 var user = new ApplicationUser
                 {
@@ -82,12 +108,23 @@ namespace Employee_management.Repositories.Services.Classes
                     PhoneNumber = dto.PhoneNumber,
                     FirstName = dto.FirstName,
                     LastName = dto.LastName,
-                    EmailConfirmed = false // Set false so user must confirm
+                    EmailConfirmed = false,
+                    ProfileImagePath = profileImagePath
                 };
 
                 var createResult = await _userManager.CreateAsync(user, dto.Password);
                 if (!createResult.Succeeded)
                 {
+                    // Clean up uploaded file if user creation fails
+                    if (profileImagePath != null)
+                    {
+                        var filePath = Path.Combine(_env.WebRootPath, profileImagePath.TrimStart('/'));
+                        if (File.Exists(filePath))
+                        {
+                            File.Delete(filePath);
+                        }
+                    }
+
                     var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
                     return new AuthResponse
                     {

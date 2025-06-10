@@ -2,6 +2,7 @@
 using Employee_management.Shared;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 
 namespace Employee_management.Interfaces.Interfaces
 {
@@ -38,6 +39,8 @@ namespace Employee_management.Interfaces.Interfaces
         Task<ApplicationUser> GetUserByIdAsync(string userId);
 
         Task<PagedResponseDto<CreateManagerDto>> GetManagersPaginatedAsync(PaginationRequestDto request);
+
+        Task<string?> SaveProfileImageAsync(IFormFile? file);
 
     }
 }

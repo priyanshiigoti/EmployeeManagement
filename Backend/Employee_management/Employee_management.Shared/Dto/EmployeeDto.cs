@@ -28,6 +28,9 @@ namespace Employee_management.Shared.Dto
         public string? DepartmentName { get; set; }
 
         public bool IsActive { get; set; }
+
+        public string? ProfileImagePath { get; set; } // Add this line
+
     }
 
     public class PaginatedResult<T>

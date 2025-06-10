@@ -11,5 +11,6 @@ namespace Employee_management.Shared
     {
         public string FirstName { get; set; }
         public string LastName { get; set; }
+        public string? ProfileImagePath {  get; set; }
     }
 }

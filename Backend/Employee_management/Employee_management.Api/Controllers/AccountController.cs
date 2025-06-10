@@ -27,7 +27,7 @@ namespace Employee_management.Repositories.Service.Classes
 
         [HttpPost("RegisterEmployee")]
         [AllowAnonymous]
-        public async Task<IActionResult> RegisterEmployee([FromBody] UserRegistrationDto dto)
+        public async Task<IActionResult> RegisterEmployee([FromForm] UserRegistrationDto dto)
         {
             _logger.LogInformation("Registration attempt for {Email}", dto.Email);
 
@@ -42,7 +42,6 @@ namespace Employee_management.Repositories.Service.Classes
             if (!result.IsSuccess)
             {
                 _logger.LogWarning("Registration failed: {Message}", result.Message);
-                // You can return a simple message or wrap it inside an error list if needed
                 return BadRequest(new { Errors = new[] { result.Message } });
             }
 

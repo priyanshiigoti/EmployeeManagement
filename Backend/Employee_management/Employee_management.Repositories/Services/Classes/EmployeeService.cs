@@ -1,13 +1,14 @@
-﻿using Employee_management.Api.Data;
+﻿using Azure.Core;
+using Employee_management.Api.Data;
 using Employee_management.Interfaces.Interfaces;
 using Employee_management.Shared;
 using Employee_management.Shared.Dto;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+
 using System.Threading.Tasks;
 
 namespace Employee_management.Repositories.Services.Classes
@@ -18,17 +19,26 @@ namespace Employee_management.Repositories.Services.Classes
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly ILogger<EmployeeService> _logger;
+        private readonly IWebHostEnvironment _env;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public EmployeeService(
             ApplicationDbContext context,
             UserManager<ApplicationUser> userManager,
             RoleManager<IdentityRole> roleManager,
-            ILogger<EmployeeService> logger)
+            ILogger<EmployeeService> logger, 
+            IWebHostEnvironment env,
+                IHttpContextAccessor httpContextAccessor) // <-- Add this
+
+
         {
             _context = context;
             _userManager = userManager;
             _roleManager = roleManager;
             _logger = logger;
+            _env = env;
+            _httpContextAccessor = httpContextAccessor; // <-- Assign it
+  
         }
 
         public async Task<PagedResponseDto<EmployeeDto>> GetEmployeesPaginatedAsync(PaginationRequestDto request, string? currentUserId, bool isAdmin)
@@ -106,7 +116,9 @@ namespace Employee_management.Repositories.Services.Classes
                     PhoneNumber = e.User.PhoneNumber,
                     DepartmentId = e.DepartmentId,
                     DepartmentName = e.Department != null ? e.Department.Name : null,
-                    IsActive = e.IsActive
+                    IsActive = e.IsActive,
+                    ProfileImagePath = e.User.ProfileImagePath // Add this line
+
                 })
                 .ToListAsync();
 
@@ -159,6 +171,9 @@ namespace Employee_management.Repositories.Services.Classes
                 .ToListAsync();
         }
 
+       
+
+
         public async Task<EmployeeDto> GetByIdAsync(int id)
         {
             var employee = await _context.Employees
@@ -176,7 +191,9 @@ namespace Employee_management.Repositories.Services.Classes
                 PhoneNumber = employee.User.PhoneNumber,
                 DepartmentId = employee.DepartmentId,
                 DepartmentName = employee.Department.Name,
-                IsActive = employee.IsActive
+                IsActive = employee.IsActive,
+                ProfileImagePath = employee.User.ProfileImagePath // Add this line
+
             };
         }
 
@@ -246,7 +263,9 @@ namespace Employee_management.Repositories.Services.Classes
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber,
                 FirstName = dto.FirstName,
-                LastName = dto.LastName
+                LastName = dto.LastName,
+                ProfileImagePath = dto.ProfileImagePath // Add this line
+
             };
 
             var createUserResult = await _userManager.CreateAsync(user, dto.Password);
@@ -364,13 +383,14 @@ namespace Employee_management.Repositories.Services.Classes
             };
         }
 
-        public async Task<bool> UpdateManagerAsync(int employeeId, UpdateManagerDto dto)
+        public async Task<bool> UpdateManagerAsync(int id, UpdateManagerDto dto)
         {
             var employee = await _context.Employees
                 .Include(e => e.User)
-                .FirstOrDefaultAsync(e => e.Id == employeeId);
+                .FirstOrDefaultAsync(e => e.Id == id);
 
-            if (employee == null) return false;
+            if (employee == null)
+                return false;
 
             employee.User.FirstName = dto.FirstName;
             employee.User.LastName = dto.LastName;
@@ -378,9 +398,13 @@ namespace Employee_management.Repositories.Services.Classes
             employee.DepartmentId = dto.DepartmentId;
             employee.IsActive = dto.IsActive;
 
+            if (!string.IsNullOrEmpty(dto.ProfileImagePath))
+                employee.User.ProfileImagePath = dto.ProfileImagePath;
+
             await _context.SaveChangesAsync();
             return true;
         }
+
 
         public async Task<bool> DeleteManagerByUserIdAsync(string userId)
         {
@@ -441,7 +465,8 @@ namespace Employee_management.Repositories.Services.Classes
                     PhoneNumber = e.User.PhoneNumber,
                     DepartmentName = e.Department.Name,
                     DepartmentId = e.DepartmentId,
-                    IsActive = e.IsActive
+                    IsActive = e.IsActive,
+
                 })
                 .ToListAsync();
         }
@@ -457,6 +482,26 @@ namespace Employee_management.Repositories.Services.Classes
         public async Task<ApplicationUser> GetUserByIdAsync(string userId)
         {
             return await _userManager.FindByIdAsync(userId);
+        }
+
+        public async Task<string?> SaveProfileImageAsync(IFormFile? file)
+        {
+            if (file == null || file.Length == 0)
+                return null;
+
+            var folderPath = Path.Combine(_env.WebRootPath, "uploads", "managers");
+            Directory.CreateDirectory(folderPath);
+
+            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+            var filePath = Path.Combine(folderPath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Return relative path only, not full URL
+            return Path.Combine("uploads", "managers", fileName).Replace("\\", "/");
         }
 
 
@@ -519,7 +564,8 @@ namespace Employee_management.Repositories.Services.Classes
                     PhoneNumber = e.User.PhoneNumber,
                     DepartmentId = e.DepartmentId,
                     DepartmentName = e.Department != null ? e.Department.Name : "Unassigned",
-                    IsActive = e.IsActive
+                    IsActive = e.IsActive,
+                    ProfileImagePath = e.User.ProfileImagePath // Ensure this is included
                 })
                 .ToListAsync();
 
@@ -534,6 +580,9 @@ namespace Employee_management.Repositories.Services.Classes
                 Items = pagedManagers
             };
         }
+
+      
+
 
     }
 }

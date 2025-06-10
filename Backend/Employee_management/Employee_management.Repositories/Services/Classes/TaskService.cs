@@ -225,27 +225,45 @@ namespace Employee_management.Repositories.Services.Classes
 
         public async Task<IEnumerable<EmployeeDropdownDto>> GetEmployeesAsync(string userId, string role)
         {
-            var query = _context.Employees
-                .Include(e => e.User)
-                .Include(e => e.Department)
-                .Where(e => e.IsActive)
-                .AsQueryable();
-
-            if (role == "Manager")
-            {
-                var manager = await _context.Employees.FirstOrDefaultAsync(e => e.UserId == userId);
-                if (manager != null)
-                {
-                    query = query.Where(e => e.DepartmentId == manager.DepartmentId);
-                }
-            }
-            // For employees, return empty list
-            else if (role == "Employee")
+            if (role == "Employee")
             {
                 return new List<EmployeeDropdownDto>();
             }
 
+            // Get the Role Id for "Employee"
+            var employeeRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Employee");
+            if (employeeRole == null)
+            {
+                // No Employee role found, return empty
+                return new List<EmployeeDropdownDto>();
+            }
+
+            // Get userIds of employees with "Employee" role
+            var employeeUserIds = await _context.UserRoles
+                .Where(ur => ur.RoleId == employeeRole.Id)
+                .Select(ur => ur.UserId)
+                .ToListAsync();
+
+            var query = _context.Employees
+                .Include(e => e.User)
+                .Include(e => e.Department)
+                .Where(e => e.IsActive && employeeUserIds.Contains(e.UserId))
+                .AsQueryable();
+
+            if (role == "Manager")
+            {
+                var manager = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId);
+
+                if (manager != null && manager.DepartmentId.HasValue)
+                {
+                    query = query.Where(e => e.DepartmentId == manager.DepartmentId);
+                }
+            }
+
             return await query
+                .OrderBy(e => e.User.FirstName)
+                .ThenBy(e => e.User.LastName)
                 .Select(e => new EmployeeDropdownDto
                 {
                     Id = e.Id,
@@ -253,8 +271,7 @@ namespace Employee_management.Repositories.Services.Classes
                     FirstName = e.User.FirstName,
                     LastName = e.User.LastName,
                     FullName = e.User.FirstName + " " + e.User.LastName,
-                    DepartmentName = e.Department.Name,
-                    //DepartmentId = e.DepartmentId
+                    DepartmentName = e.Department != null ? e.Department.Name : "No Department"
                 })
                 .ToListAsync();
         }
@@ -266,7 +283,6 @@ namespace Employee_management.Repositories.Services.Classes
                 .Include(t => t.CreatedBy)
                 .AsQueryable();
 
-            // 🔐 Authorization Filters
             if (role == "Employee")
             {
                 query = query.Where(t => t.AssignedToId == userId);
@@ -288,7 +304,6 @@ namespace Employee_management.Repositories.Services.Classes
                 }
             }
 
-            // 🔍 Search
             if (!string.IsNullOrWhiteSpace(request.SearchTerm))
             {
                 query = query.Where(t =>
@@ -296,7 +311,6 @@ namespace Employee_management.Repositories.Services.Classes
                     t.Description.Contains(request.SearchTerm));
             }
 
-            // 🔃 Sorting
             switch (request.SortColumn?.ToLower())
             {
                 case "title":
@@ -315,13 +329,11 @@ namespace Employee_management.Repositories.Services.Classes
 
             var totalCount = await query.CountAsync();
 
-            // 📄 Paging
             var items = await query
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
                 .ToListAsync();
 
-            // 🧠 Load employees for name/department mapping
             var employees = await _context.Employees
                 .Include(e => e.User)
                 .Include(e => e.Department)
