@@ -1,0 +1,31 @@
+cat <<EOL > .gitignore
+# Visual Studio temporary files, build results, and user-specific files
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider IDE files
+.idea/
+
+# Node.js packages (if applicable)
+node_modules/
+
+# Logs
+*.log
+
+# Publish output folder
+publish/
+
+# Resharper files
+_ReSharper*/
+
+# Database files
+*.dbmdl
+*.bak
+*.Backup
+*.Cache
+EOL
