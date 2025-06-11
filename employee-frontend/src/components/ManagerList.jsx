@@ -365,12 +365,14 @@ function ManagerList() {
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Avatar 
 src={
-  manager.profileImagePath 
-    ? (manager.profileImagePath.startsWith('http') 
-       ? manager.profileImagePath 
-       : `https://localhost:7231/${manager.profileImagePath}`) 
+  manager.profileImagePath
+    ? (manager.profileImagePath.startsWith('http')
+        ? manager.profileImagePath
+        : `${process.env.REACT_APP_API_URL.replace(/\/api$/, '')}/${manager.profileImagePath.replace(/^\/?/, '')}`
+      )
     : ''
 }
+
                         sx={{ width: 40, height: 40, mr: 2 }}
                         alt={`${manager.firstName} ${manager.lastName}`}
                       >

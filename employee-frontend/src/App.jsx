@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import api from './axiosConfig';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import DepartmentList from './components/DepartmentList';
@@ -9,28 +10,48 @@ import RegisterEmployee from './components/RegisterEmployee';
 import AdminDashboard from './components/AdminDashboard';
 import ManagerDashboard from './components/ManagerDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
-import AdminUserCreate from './components/AdminUserCreate';
-import AddManager from './components/AddManager';
-import EditManager from './components/EditManager';
 import { getCurrentUser, logout } from './services/authService';
 import Navbar from './components/Navbar';
-import EditEmployee from './components/EditEmployee';
 import Task from './components/Task';
 import Profile from './components/Profile';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AccessDenied from './pages/AccessDenied';
 
-
 export default function App() {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileError, setProfileError] = useState(null);
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await api.get('/profile');
+      setUserProfile(response.data);
+      setProfileError(null);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      setProfileError('Failed to load profile data');
+      // Set default profile data if available from user
+      if (user) {
+        setUserProfile({
+          FirstName: 'User',
+          LastName: '',
+          Email: user.email
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const currentUser = getCurrentUser();
         setUser(currentUser);
+        
+        if (currentUser) {
+          await fetchUserProfile();
+        }
       } catch (error) {
         console.error('Error fetching user:', error);
       } finally {
@@ -41,14 +62,16 @@ export default function App() {
     fetchUser();
   }, []);
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = async () => {
     const currentUser = getCurrentUser();
     setUser(currentUser);
+    await fetchUserProfile();
   };
 
   const handleLogout = () => {
     logout();
     setUser(null);
+    setUserProfile(null);
     return <Navigate to="/login" />;
   };
 
@@ -74,7 +97,7 @@ export default function App() {
       );
 
       if (!hasRequiredRole) {
-  return <Navigate to="/access-denied" replace />;
+        return <Navigate to="/access-denied" replace />;
       }
     }
 
@@ -96,13 +119,12 @@ export default function App() {
       return <EmployeeDashboard />;
     }
     
-    // Fallback for users with no recognized roles
     return <Dashboard />;
   };
 
   return (
     <Router>
-      <Navbar user={user} onLogout={handleLogout} />
+      <Navbar user={user} onLogout={handleLogout} userProfile={userProfile} />
       <div className="container mt-4">
         <Routes>
           {/* Home/Dashboard Route */}
@@ -127,33 +149,32 @@ export default function App() {
           } />
           <Route path="/access-denied" element={<AccessDenied />} />
 
-
           {/* Admin Routes */}
           <Route path="/departments" element={
             <ProtectedRoute roles={['Admin']}>
               <DepartmentList />
             </ProtectedRoute>
           } />
-          <Route path="/admin/users/create" element={
+          {/* <Route path="/admin/users/create" element={
             <ProtectedRoute roles={['Admin']}>
               <AdminUserCreate />
             </ProtectedRoute>
-          } />
+          } /> */}
           <Route path="/managers" element={
             <ProtectedRoute roles={['Admin']}>
               <ManagerList />
             </ProtectedRoute>
           } />
-          <Route path="/managers/add" element={
+          {/* <Route path="/managers/add" element={
             <ProtectedRoute roles={['Admin']}>
               <AddManager />
             </ProtectedRoute>
-          } />
-          <Route path="/managers/edit/:id" element={
+          } /> */}
+          {/* <Route path="/managers/edit/:id" element={
             <ProtectedRoute roles={['Admin']}>
               <EditManager />
             </ProtectedRoute>
-          } />
+          } /> */}
 
           {/* Manager Routes */}
           <Route path="/employees" element={
@@ -161,11 +182,11 @@ export default function App() {
               <EmployeeList />
             </ProtectedRoute>
           } />
-          <Route path="/employees/edit/:id" element={
+          {/* <Route path="/employees/edit/:id" element={
             <ProtectedRoute roles={['Admin', 'Manager']}>
               <EditEmployee />
             </ProtectedRoute>
-          } />
+          } /> */}
 
           {/* Shared Routes */}
           <Route path="/tasks" element={

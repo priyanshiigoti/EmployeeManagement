@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'https://localhost:7231/api/Account/';
+const API_URL = `${process.env.REACT_APP_API_URL}/Account/`;
 const TOKEN_KEY = 'employee_mgmt_token';
 
 const NAME_IDENTIFIER = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier';

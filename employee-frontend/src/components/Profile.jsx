@@ -24,31 +24,34 @@ const Profile = () => {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('https://localhost:7231/api/profile', {
+  const fetchProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/profile`,
+        {
           headers: { Authorization: `Bearer ${token}` }
-        });
-        setProfileData(response.data);
-        setFormData({
-          firstName: response.data.firstName,
-          lastName: response.data.lastName,
-          phoneNumber: response.data.phoneNumber || '',
-          currentPassword: '',
-          newPassword: '',
-        });
-        setLoading(false);
-      } catch (error) {
-        toast.error('Failed to load profile. Please login again.');
-        setLoading(false);
-      }
-    };
+        }
+      );
+      setProfileData(response.data);
+      setFormData({
+        firstName: response.data.firstName,
+        lastName: response.data.lastName,
+        phoneNumber: response.data.phoneNumber || '',
+        currentPassword: '',
+        newPassword: '',
+      });
+      setLoading(false);
+    } catch (error) {
+      toast.error('Failed to load profile. Please login again.');
+      setLoading(false);
+    }
+  };
 
-    fetchProfile();
-  }, []);
+  fetchProfile();
+}, []);
 
-  const handleInputChange = (e) => {
+const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -88,7 +91,7 @@ const Profile = () => {
         uploadFormData.append('file', selectedImage);
 
         try {
-          await axios.post('https://localhost:7231/api/profile/upload-image', uploadFormData, {
+          await axios.post('${process.env.REACT_APP_API_URL}/profile/upload-image', uploadFormData, {
             headers: {
               Authorization: `Bearer ${token}`,
               'Content-Type': 'multipart/form-data',
@@ -96,7 +99,7 @@ const Profile = () => {
           });
 
           // Refresh profile to get new image path
-          const profileResponse = await axios.get('https://localhost:7231/api/profile', {
+          const profileResponse = await axios.get('${process.env.REACT_APP_API_URL}/profile', {
             headers: { Authorization: `Bearer ${token}` }
           });
           imagePath = profileResponse.data.profileImagePath;
@@ -121,14 +124,14 @@ const Profile = () => {
         profileImagePath: imagePath
       };
 
-      const updateResponse = await axios.put('https://localhost:7231/api/profile', updateData, {
+      const updateResponse = await axios.put('${process.env.REACT_APP_API_URL}/profile', updateData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       toast.success('Profile updated successfully');
       
       // Refresh profile data after update
-      const refreshedProfile = await axios.get('https://localhost:7231/api/profile', {
+      const refreshedProfile = await axios.get('${process.env.REACT_APP_API_URL}/profile', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setProfileData(refreshedProfile.data);
@@ -167,7 +170,7 @@ const Profile = () => {
               <div className="mb-3 text-center">
                 {profileData.profileImagePath ? (
                   <img
-                    src={`https://localhost:7231${profileData.profileImagePath.startsWith('/') ? '' : '/'}${profileData.profileImagePath}`}
+        src={`${process.env.REACT_APP_API_URL.replace(/\/api$/, '')}/${profileData.profileImagePath.replace(/^\/?/, '')}`}
                     alt="Profile"
                     style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: '50%' }}
                     onError={(e) => {

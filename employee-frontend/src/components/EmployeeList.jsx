@@ -291,8 +291,12 @@ function EmployeeList() {
                 <TableRow key={emp.id} hover>
                   <TableCell>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
-                     <Avatar
-  src={emp.profileImagePath ? `https://localhost:7231/${emp.profileImagePath.replace(/^\/?/, '')}` : undefined}
+                    <Avatar
+  src={
+    emp.profileImagePath
+      ? `${process.env.REACT_APP_API_URL.replace(/\/api$/, '')}/${emp.profileImagePath.replace(/^\/?/, '')}`
+      : undefined
+  }
   sx={{ width: 40, height: 40, mr: 2 }}
 >
   {!emp.profileImagePath &&
@@ -355,8 +359,12 @@ function EmployeeList() {
         <DialogTitle>{currentEmployee ? 'Edit Employee' : 'Add Employee'}</DialogTitle>
        <DialogContent sx={{ pt: 2, minWidth: 400 }}>
   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-  <Avatar 
-  src={currentEmployee?.profileImagePath ? `https://localhost:7231/${currentEmployee.profileImagePath.replace(/^\/?/, '')}` : undefined}
+  <Avatar
+  src={
+    currentEmployee?.profileImagePath
+      ? `${process.env.REACT_APP_API_URL.replace(/\/api$/, '')}/${currentEmployee.profileImagePath.replace(/^\/?/, '')}`
+      : undefined
+  }
   sx={{ width: 100, height: 100 }}
 >
   {currentEmployee?.firstName?.charAt(0)}

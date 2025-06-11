@@ -64,7 +64,7 @@ export const deleteDepartment = async (id) => {
 
 export const getActiveDepartments = async () => {
   try {
-    const response = await api.get('/Employee/active'); // or `${API_BASE_URL}/active`
+    const response = await api.get('/Employee/active'); 
     return response.data;
   } catch (error) {
     console.error("Error fetching active departments:", error.response?.data || error.message);
